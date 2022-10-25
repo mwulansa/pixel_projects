@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 path_automask = '/Users/muti/Documents/Pixel/automask_muti_test/'
 
 def get_module_list(fil):
-    if args.listOfFiles is not None or args.inputfile is not None : fil = path_automask+fil
     m = []
     with open(fil) as f:
         for line in f.readlines():
@@ -218,7 +217,8 @@ if __name__ == "__main__":
     len_stuck = []
 
     if args.inputfile is not None:
-        fileList = args.inputfile
+        openList = args.inputfile
+        fileList = [path_automask+i for i in openList]
         rep, rec = print_repeating_module(fileList, args.timestamp)
 
         print("--------------------")
@@ -231,7 +231,8 @@ if __name__ == "__main__":
         exit()
 
     elif args.listOfFiles is not None:
-        fileList = open(args.listOfFiles).read().splitlines()
+        openList = open(args.listOfFiles).read().splitlines()
+        fileList = [path_automask+i for i in openList]
         rep, rec = print_repeating_module(fileList, args.timestamp)
 
         print("--------------------")
