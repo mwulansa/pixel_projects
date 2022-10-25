@@ -4,10 +4,12 @@ from datetime import datetime, timezone, timedelta
 import glob
 import pandas as pd
 from omsapi import OMSAPI
+import matplotlib.pyplot as plt
 
-path_automask = '/Users/muti/Documents/Pixel/automasked_test_muti/'
+path_automask = '/Users/muti/Documents/Pixel/automask_muti_test/'
 
 def get_module_list(fil):
+    if args.listOfFiles is not None or args.inputfile is not None : fil = path_automask+fil
     m = []
     with open(fil) as f:
         for line in f.readlines():
@@ -22,6 +24,23 @@ def get_module_list(fil):
 
     return m
 
+def return_recover(lafter, lbefore):
+
+    recover = []
+    
+    for i in lbefore:
+        if i not in lafter:
+            recover.append(i)
+
+    len_recover.append(len(recover))
+            
+    return recover
+
+def plot_hist(x):
+    plt.hist(x, bins=range(min(x), max(x) + 1, 1))
+    plt.show() 
+
+
 def compare_list(modlist):
     for i in range(len(modlist)):
         globals()[f"set{i}"] = set(modlist[i])
@@ -34,7 +53,11 @@ def compare_list(modlist):
     same = list(set(same))
     same.sort()
 
-    return same
+    len_stuck.append(len(same))
+
+    recover = return_recover(list(same), list(set0))
+
+    return same, recover
 
 def find_file_timestamp(ser_time):
     ser_datetime_object = datetime.strptime(ser_time , '%Y-%m-%d_%H:%M:%S')
@@ -48,15 +71,23 @@ def find_file_timestamp(ser_time):
         creation_time_list.append(int(creation_datetime))
 
     creation_time_list = sorted(creation_time_list)
-    filesFound = 0
+    filesFound = False
 
     for i in range(len(creation_time_list)-1):
         if ser_unix_time > creation_time_list[i] and ser_unix_time < creation_time_list[i+1] :
             before = creation_time_list[i]
             after = creation_time_list[i+1]
-            filesFound = 1
+            filesFound = True
+        elif ser_unix_time == creation_time_list[i]:
+            if i == 0:
+                print("No automasked list found before the time provided")
+                print("Exiting")
+                exit()
+            before = creation_time_list[i-1]
+            after = creation_time_list[i+1]
+            filesFound = True
 
-    if filesFound == 0:
+    if filesFound == False:
         print("No automasked list found either before or after the time provided")
         print("Exiting")
         exit()
@@ -73,19 +104,26 @@ def find_file_timestamp(ser_time):
 
     return fils
 
+
 def print_repeating_module(fl, ts=str(datetime.now())):
     modules = []
     for f in fl:
         modules.append(get_module_list(f))
 
+    repeating_module, recovered_module = compare_list(modules)
+
     # print("Repeating Modules:") 
-    # print(*compare_list(modules), sep="\n")
-    write_repeating_modules(compare_list(modules), ts)
+    # print(*repeating_module, sep="\n")
+
+    write_modules(repeating_module, ts)
+    write_modules(recovered_module, ts, "recovered")
+
+    return repeating_module, recovered_module
 
 
-def write_repeating_modules(modlist, occ):
+def write_modules(modlist, occ, modtype = "repeating"):
     modWrite = ["{}\n".format(i+" "+occ) for i in modlist]
-    with open(path_automask+'tmp_repreating_modules.txt', 'a') as fil:
+    with open(path_automask+'tmp_'+modtype+'_modules.txt', 'a') as fil:
         fil.writelines(modWrite)
 
 
@@ -97,10 +135,15 @@ def make_table(fn):
     if os.path.exists(path_automask+str(fn)+'_occurences_table.csv'):
         os.remove(path_automask+str(fn)+'_occurences_table.csv')
 
-    table = pd.read_csv(path_automask+'tmp_repreating_modules.txt', sep=' ', header=None, names=["Modules", "SER Time"])
+
+    table = pd.read_csv(path_automask+'tmp_repeating_modules.txt', sep=' ', header=None, names=["Modules", "SER Time"])
     table.sort_values(by=["Modules", "SER Time"], inplace=True)
 
+    # table_rec = pd.read_csv(path_automask+'tmp_recovered_modules.txt', sep=' ', header=None, names=["Modules", "SER Time"])
+    # table_rec.sort_values(by=["Modules", "SER Time"], inplace=True)
+
     table.to_csv(path_automask+str(fn)+'_raw_table.csv')
+    # table_rec.to_csv(path_automask+str(fn)+'_raw_table_recovered.csv')
 
     pivot_table = table.pivot_table(index=['Modules'],columns=['SER Time'], aggfunc='size')
     pivot_table.to_csv(path_automask+str(fn)+'_pivot_table.csv')
@@ -164,26 +207,58 @@ def query_downtime(fll):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Comparing auto-masked channels lists")
-    parser.add_argument("-i", "--files", nargs="+", type=str, help="Compares automasked modules between the given textfiles")
+    parser.add_argument("-i", "--inputfile", nargs="+", type=str, help="Compares automasked modules between the given textfiles")
     parser.add_argument("-l", "--listOfFiles", type=str, help="Compares automasked modules between the textfiles in the given list")
     parser.add_argument("-t", "--timestamp", type=str, help="Compares automasked modules before and after the given timestamp")
     parser.add_argument("-s", "--ser", nargs="+", type=str, help="Compares automasked modules before and after the listed timestamps")
     parser.add_argument("-f", "--fill", type=int, help="Compares automasked modules before and after SER times queried from the given fill number")
     args = parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
-    if args.files is not None:
-        fileList = args.files
+    len_recover = []
+    len_stuck = []
+
+    if args.inputfile is not None:
+        fileList = args.inputfile
+        rep, rec = print_repeating_module(fileList, args.timestamp)
+
+        print("--------------------")
+        print("Repeating Modules:")
+        print(*rep, sep="\n")
+
+        print("--------------------")
+        print("Recovered Modules:")
+        print(*rec, sep="\n")
+        exit()
 
     elif args.listOfFiles is not None:
         fileList = open(args.listOfFiles).read().splitlines()
+        rep, rec = print_repeating_module(fileList, args.timestamp)
+
+        print("--------------------")
+        print("Repeating Modules:")
+        print(*rep, sep="\n")
+        
+        print("--------------------")
+        print("Recovered Modules:")
+        print(*rec, sep="\n")
+        exit()
 
     elif args.timestamp is not None:
         fileList = find_file_timestamp(args.timestamp)
-        print_repeating_module(fileList, args.timestamp)
+
+        rep, rec = print_repeating_module(fileList, args.timestamp)
+
+        print("--------------------")
+        print("Repeating Modules:")
+        print(*rep, sep="\n")
+
+        print("--------------------")
+        print("Recovered Modules:")
+        print(*rec, sep="\n")
         exit()
 
     elif args.ser is not None:
-        os.remove(path_automask+'tmp_repreating_modules.txt')
+        os.remove(path_automask+'tmp_repeating_modules.txt')
         for stamp in args.ser:
             fileList = find_file_timestamp(stamp)
             print_repeating_module(fileList, stamp)
@@ -191,13 +266,16 @@ if __name__ == "__main__":
         exit()
 
     elif args.fill is not None:
-        if os.path.exists(path_automask+'tmp_repreating_modules.txt'):
-            os.remove(path_automask+'tmp_repreating_modules.txt')
+        if os.path.exists(path_automask+'tmp_repeating_modules.txt'):
+            os.remove(path_automask+'tmp_repeating_modules.txt')
         ser_time_fill = query_downtime(args.fill)
         for stamp in ser_time_fill:
             fileList = find_file_timestamp(stamp)
             print_repeating_module(fileList, stamp)
         make_table(args.fill)
+        print(len_recover)
+        print(len_stuck)
+        plot_hist(len_recover)
         exit()
 
     else:
@@ -211,6 +289,3 @@ if __name__ == "__main__":
         exit()
 
     print_repeating_module(fileList)
-
-
-   
