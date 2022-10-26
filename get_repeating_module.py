@@ -259,7 +259,6 @@ if __name__ == "__main__":
         exit()
 
     elif args.ser is not None:
-        if os.path.exists(path_automask+'tmp_repeating_modules.txt') : os.remove(path_automask+'tmp_repeating_modules.txt')
         for stamp in args.ser:
             fileList = find_file_timestamp(stamp)
             rep, rec = print_repeating_module(fileList, stamp)
@@ -271,7 +270,7 @@ if __name__ == "__main__":
             print("--------------------")
             print("Recovered Modules:")
             print(*rec, sep="\n")
-            
+
         exit()
 
     elif args.fill is not None:
@@ -296,5 +295,3 @@ if __name__ == "__main__":
         print("Please provide more than one module lists")
         print("Exiting")
         exit()
-
-    print_repeating_module(fileList)
