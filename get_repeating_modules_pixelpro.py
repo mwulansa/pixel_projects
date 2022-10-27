@@ -10,6 +10,7 @@ import subprocess
 #Run $python3 get_repeating_modules.py --help for details and list of arguments
 
 path_automask = '/nfspixelraid/nfspixelraid/users/masks/automasked_channels/'
+#csvpng_outpath = ''
 
 def get_module_list(fil):
     m = []
@@ -21,10 +22,14 @@ def get_module_list(fil):
             fpix = re.search('FPix_B[pm][IO]_D\d_BLD\d+_PNL\d_RNG\d', line)
             if fpix:
                 m.append(fpix.group(0))
+
+        ch = m
+        ch.sort()
+
         m = list(set(m))
         m.sort()
 
-    return m
+    return m, ch
 
 def return_recover(lafter, lbefore):
 
@@ -135,8 +140,9 @@ def find_file_timestamp(ser_time, start=0, stop=0):
         fils = [glob.glob(path_automask+'/automasked_*'+str(x)+'*.txt')[0] for x in trange]
         trange_datetime = [str(datetime.utcfromtimestamp(x).strftime('%Y-%m-%d_%H:%M:%S')) for x in trange]
 
-        # print("Files within time range:")
-        # print(*fils, sep="\n")
+        if args.verbose:
+            print("Files within time range:")
+            print(*fils, sep="\n")
 
         return(fils, trange_datetime)
 
@@ -144,7 +150,7 @@ def find_file_timestamp(ser_time, start=0, stop=0):
 def print_repeating_module(fl, ts=str(datetime.now())):
     modules = []
     for f in fl:
-        modules.append(get_module_list(f))
+        modules.append(get_module_list(f)[0])
 
     repeating_module, recovered_module, new_module, n_masked = compare_list(modules)
 
@@ -159,7 +165,7 @@ def get_nmasked(fl):
 
     modules = []
     for f in fl:
-        modules.append(get_module_list(f))
+        modules.append(get_module_list(f)[1])
 
     nmasked = []
     nbpix = [[],[],[],[]]
@@ -186,8 +192,15 @@ def get_nmasked(fl):
         nfpix[1].append(len(d2))
         nfpix[2].append(len(d3))
 
-#    print("Number of masked channels in each file:")
-#    print(nmasked)
+
+    if args.verbose :
+
+        print("Number of total masked modules in each file:")
+        print(nmasked)
+        print("Number of bpix masked modules in each file [[lyr1],[lyr2],[lyr3],[lyr4]]:")
+        print(nbpix)
+        print("Number of fpix masked modules in each file [[d1],[d2],[d3]]:")
+        print(nfpix)
 
     return nmasked, nbpix, nfpix
 
@@ -199,7 +212,10 @@ def write_modules(modlist, occ, modtype = "repeating"):
 
 
 def write_csv(tstamp, nmasked, bpix, fpix):
-    out = path_automask+"N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+".csv"
+#    out = path_automask+"N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+".csv"
+#    out = csvpng_outpath+"N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+".csv"
+    out = "N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+".csv"
+
     csvFile = open(out, "w", newline = "")
     header = ['File_timestamp','Masked_Total','LYR1','LYR2','LYR3','LYR4','D1','D2','D3']
     writer = csv.DictWriter(csvFile, delimiter=' ', fieldnames = header)
@@ -235,12 +251,16 @@ def make_hist(filname,st,opt="--all"):
 
     run = []
     run.append("python")
-    run.append("dump_masked_channels.py")
+    run.append("/nfshome0/pixelpro/opstools/masked/dump_masked_channels.py")
     run.append("-i")
     run.append(filname)
     run.append("-st")
     run.append(st)
     run.append(opt)
+
+    if args.verbose:
+        print("Command to run dump script:")
+        print(run)
 
     proc = subprocess.Popen(run)
     
@@ -256,13 +276,16 @@ if __name__ == "__main__":
     requiredName.add_argument("-i", "--inputfile", nargs="+", type=str, help="Compares automasked modules between the given textfiles")
     requiredName.add_argument("-l", "--listOfFiles", type=str, help="Compares automasked modules between the textfiles in the given list")
     requiredName.add_argument("-t", "--timestamp", nargs="+", type=str, help="Compares automasked modules before and after the listed timestamps. Can give one or more timestamps, Format: YYYY-MM-DD_HH:MM:SS")
-    parser.add_argument("-f", "--fill", type=int, help="Compares automasked modules before and after SER times queried from the given fill number. DOES NOT WORK IN PIXEL MACHINE YET")
+    requiredName.add_argument("-f", "--fill", type=int, help="Compares automasked modules before and after SER times queried from the given fill number. DOES NOT WORK IN PIXEL MACHINE YET")
+
     requiredName.add_argument("-r", "--timerange", nargs=2, type=str, help="Start and End time to compare lists. Format: -r YYYY-MM-DD_HH:MM:SS YYYY-MM-DD_HH:MM:SS")
 
     parser.add_argument("--full", action="store_true", help="Plot total masked channels. To be used with -r/--timerange")
     parser.add_argument("--bpix", action="store_true", help="Plot bpix masked channels. To be used with -r/--timerange")
     parser.add_argument("--fpix", action="store_true", help="Plot fpix masked channels. To be used with -r/--timerange")
     parser.add_argument("--all", action="store_true", help="Overlay total, bpix, fpix. To be used with -r/--timerange")
+
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose Output")
     
     args = parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
@@ -288,12 +311,15 @@ if __name__ == "__main__":
             print_separator()
             print("Repeating Modules:")
             print(*rep, sep="\n")
+            print("Number:", len(rep))
             print_separator()
             print("Recovered Modules:")
             print(*rec, sep="\n")
+            print("Number:", len(rec))
             print_separator()
             print("New Modules:")
             print(*ne, sep="\n")
+            print("Number:", len(ne))
 
         exit()
 
@@ -321,11 +347,14 @@ if __name__ == "__main__":
     print_separator()
     print("Repeating Modules:")
     print(*rep, sep="\n")
+    print("Number:", len(rep))
     print_separator()
     print("Recovered Modules:")
     print(*rec, sep="\n")
+    print("Number:", len(rec))
     print_separator()
     print("New Modules:")
     print(*ne, sep="\n")
+    print("Number:", len(ne))
 
     exit()
