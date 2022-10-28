@@ -6,11 +6,22 @@ import csv
 import subprocess
 
 #Created by Muti Wulansatiti. Email: meutia.wulansatiti@cern.ch
-#Compares automasked channels lists and returns the repeating, recovered, and new modules. option -r/--timerange plots the number of masked channels overtim
+#Compares automasked channels lists and returns the repeating, recovered, and new modules. option -r/--timerange plots the number of masked channels overtime
 #Run $python3 get_repeating_modules.py --help for details and list of arguments
 
 path_automask = '/nfspixelraid/nfspixelraid/users/masks/automasked_channels/'
 #csvpng_outpath = ''
+
+def get_channel_list(fil):
+    
+    mod = [ [ y for y in x.split() if 'FED' not in y and 'channel' not in y and '->' not in y and '<-' not in y ] for x in open(fil).readlines() if len(x.split()) > 5 ]
+
+    del mod[-7:]
+
+    bl = [ x for x in mod if len(x) == 4 ]
+    nbl = [ x for x in mod if len(x) == 3 ]
+
+    return mod, bl, nbl
 
 def get_module_list(fil):
     m = []
@@ -151,6 +162,7 @@ def print_repeating_module(fl, ts=str(datetime.now())):
     modules = []
     for f in fl:
         modules.append(get_module_list(f)[0])
+        get_channel_list(f)
 
     repeating_module, recovered_module, new_module, n_masked = compare_list(modules)
 
@@ -161,48 +173,58 @@ def print_repeating_module(fl, ts=str(datetime.now())):
     return repeating_module, recovered_module, new_module, n_masked
 
 
-def get_nmasked(fl):
+def get_nmasked(fl, label="both", l=0):
 
     modules = []
     for f in fl:
-        modules.append(get_module_list(f)[1])
+#        modules.append(get_module_list(f)[1])
+        modules.append(get_channel_list(f)) #[total],[bl],[nbl]
 
     nmasked = []
     nbpix = [[],[],[],[]]
     nfpix = [[],[],[]]
- 
-    for i in range(len(modules)):
-        nmasked.append(len(modules[i]))
+    
+    if args.both : 
+        l = 0
+        label = "both"
+    if args.blacklisted : 
+        l = 1
+        label = "blacklisted"
+    if args.nonblacklisted : 
+        l =2
+        label = "nonblacklisted"
 
-        lyr1 = [j for j in modules[i] if j.split('_')[0] == 'BPix' and j.split('_')[3] == 'LYR1']
-        lyr2 = [j for j in modules[i] if j.split('_')[0] == 'BPix' and j.split('_')[3] == 'LYR2']
-        lyr3 = [j for j in modules[i] if j.split('_')[0] == 'BPix' and j.split('_')[3] == 'LYR3']
-        lyr4 = [j for j in modules[i] if j.split('_')[0] == 'BPix' and j.split('_')[3] == 'LYR4']
+    for i in range(len(modules)):
+        nmasked.append(len(modules[i][l]))
+
+        lyr1 = [j for j in modules[i][l] if j[2].split('_')[0] == 'BPix' and j[2].split('_')[3] == 'LYR1']
+        lyr2 = [j for j in modules[i][l] if j[2].split('_')[0] == 'BPix' and j[2].split('_')[3] == 'LYR2']
+        lyr3 = [j for j in modules[i][l] if j[2].split('_')[0] == 'BPix' and j[2].split('_')[3] == 'LYR3']
+        lyr4 = [j for j in modules[i][l] if j[2].split('_')[0] == 'BPix' and j[2].split('_')[3] == 'LYR4']
+
+        d1 = [j for j in modules[i][l] if j[2].split('_')[0] == 'FPix' and j[2].split('_')[2] == 'D1']
+        d2 = [j for j in modules[i][l] if j[2].split('_')[0] == 'FPix' and j[2].split('_')[2] == 'D2']
+        d3 = [j for j in modules[i][l] if j[2].split('_')[0] == 'FPix' and j[2].split('_')[2] == 'D3']
 
         nbpix[0].append(len(lyr1))
         nbpix[1].append(len(lyr2))
         nbpix[2].append(len(lyr3))
         nbpix[3].append(len(lyr4))
 
-        d1 = [j for j in modules[i] if j.split('_')[0] == 'FPix' and j.split('_')[2] == 'D1']
-        d2 = [j for j in modules[i] if j.split('_')[0] == 'FPix' and j.split('_')[2] == 'D2']
-        d3 = [j for j in modules[i] if j.split('_')[0] == 'FPix' and j.split('_')[2] == 'D3']
-
         nfpix[0].append(len(d1))
         nfpix[1].append(len(d2))
         nfpix[2].append(len(d3))
 
-
     if args.verbose :
 
-        print("Number of total masked modules in each file:")
+        print("Number of total masked channels in each file:")
         print(nmasked)
-        print("Number of bpix masked modules in each file [[lyr1],[lyr2],[lyr3],[lyr4]]:")
+        print("Number of bpix masked channels in each file [[lyr1],[lyr2],[lyr3],[lyr4]]:")
         print(nbpix)
-        print("Number of fpix masked modules in each file [[d1],[d2],[d3]]:")
+        print("Number of fpix masked channels in each file [[d1],[d2],[d3]]:")
         print(nfpix)
 
-    return nmasked, nbpix, nfpix
+    return nmasked, nbpix, nfpix, label
 
 
 def write_modules(modlist, occ, modtype = "repeating"):
@@ -211,10 +233,10 @@ def write_modules(modlist, occ, modtype = "repeating"):
         fil.writelines(modWrite)
 
 
-def write_csv(tstamp, nmasked, bpix, fpix):
+def write_csv(tstamp, nmasked, bpix, fpix, label):
 #    out = path_automask+"N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+".csv"
 #    out = csvpng_outpath+"N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+".csv"
-    out = "N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+".csv"
+    out = "N_masked_channels_"+tstamp[0]+"to"+tstamp[-1]+"_"+label+".csv"
 
     csvFile = open(out, "w", newline = "")
     header = ['File_timestamp','Masked_Total','LYR1','LYR2','LYR3','LYR4','D1','D2','D3']
@@ -251,7 +273,7 @@ def make_hist(filname,st,opt="--all"):
 
     run = []
     run.append("python")
-    run.append("/nfshome0/pixelpro/opstools/masked/dump_masked_channels.py")
+    run.append("/nfshome0/pixelpro/opstools/masked/dump_masked_channels_test.py")
     run.append("-i")
     run.append(filname)
     run.append("-st")
@@ -259,6 +281,7 @@ def make_hist(filname,st,opt="--all"):
     run.append(opt)
 
     if args.verbose:
+        run.append("--verbose")
         print("Command to run dump script:")
         print(run)
 
@@ -284,6 +307,10 @@ if __name__ == "__main__":
     parser.add_argument("--bpix", action="store_true", help="Plot bpix masked channels. To be used with -r/--timerange")
     parser.add_argument("--fpix", action="store_true", help="Plot fpix masked channels. To be used with -r/--timerange")
     parser.add_argument("--all", action="store_true", help="Overlay total, bpix, fpix. To be used with -r/--timerange")
+
+    parser.add_argument("--both", action="store_true", help="Plot masked channels both blacklisted and nonblacklisted. To be used with -r/--timerange")
+    parser.add_argument("--blacklisted", action="store_true", help="Plot masked channels blacklisted only. To be used with -r/--timerange")
+    parser.add_argument("--nonblacklisted", action="store_true", help="Plot masked non-blacklisted only. To be used with -r/--timerange")
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose Output")
     
@@ -325,9 +352,9 @@ if __name__ == "__main__":
 
     elif args.timerange is not None:
         fileList, tlist = find_file_timestamp(0, args.timerange[0], args.timerange[1])
-        nmasked, nbpix, nfpix = get_nmasked(fileList)
+        nmasked, nbpix, nfpix, label = get_nmasked(fileList)
 
-        out = write_csv(tlist, nmasked, nbpix, nfpix)
+        out = write_csv(tlist, nmasked, nbpix, nfpix, label)
 
         make_hist(out, tlist[0])
 
